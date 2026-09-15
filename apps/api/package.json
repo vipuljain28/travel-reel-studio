@@ -1,0 +1,35 @@
+{
+  "name": "@trs/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "type-check": "tsc --noEmit",
+    "test": "node --import tsx --test src/path-safety.test.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "prisma db push"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "@trs/ai-director": "0.1.0",
+    "@trs/media-analyzer": "0.1.0",
+    "@trs/reel-engine": "0.1.0",
+    "@trs/shared": "0.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.14.1",
+    "prisma": "^6.7.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

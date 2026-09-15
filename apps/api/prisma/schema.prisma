@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+model Media {
+  id               String    @id @default(cuid())
+  provider         String    @default("local")
+  providerMediaId  String?
+  filePath         String?
+  mimeType         String?
+  mediaType        String
+  fileSize         Int?
+  width            Int?
+  height           Int?
+  duration         Float?
+  dateTaken        DateTime?
+  latitude         Float?
+  longitude        Float?
+  locationName     String?
+  tripId           String?
+  qualityScore     Float?
+  sharpnessScore   Float?
+  exposureScore    Float?
+  compositionScore Float?
+  sha256           String?
+  pHash            String?
+  duplicateGroupId String?
+  aiDescription    String?
+  aiScore          Float?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  trip             Trip?     @relation(fields: [tripId], references: [id])
+  @@unique([provider, filePath])
+  @@index([sha256])
+  @@index([dateTaken])
+}
+model Trip {
+  id        String    @id @default(cuid())
+  title     String
+  startDate DateTime?
+  endDate   DateTime?
+  placeName String?
+  createdAt DateTime  @default(now())
+  media     Media[]
+}
+model Project {
+  id          String      @id @default(cuid())
+  title       String
+  destination String?
+  templateId  String      @default("viral-travel")
+  duration    Int         @default(28)
+  hook        String?
+  caption     String?
+  storyboard  String?
+  renderPlan  String?
+  mediaIds    String      @default("[]")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  jobs        RenderJob[]
+}
+model RenderJob {
+  id          String    @id @default(cuid())
+  projectId   String
+  status      String    @default("QUEUED")
+  progress    Int       @default(0)
+  outputPath  String?
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  project     Project   @relation(fields: [projectId], references: [id])
+}
+model UsageCounter {
+  id        String   @id
+  used      Int      @default(0)
+  budget    Int
+  resetDate String
+  updatedAt DateTime @updatedAt
+}
+model PlaceCache {
+  query     String   @id
+  placeId   String?
+  name      String?
+  address   String?
+  latitude  Float?
+  longitude Float?
+  updatedAt DateTime @updatedAt
+}
+model SyncState {
+  provider       String    @id
+  status         String    @default("IDLE")
+  lastSync       DateTime?
+  cursor         String?
+  itemsProcessed Int       @default(0)
+  errors         String?
+}
