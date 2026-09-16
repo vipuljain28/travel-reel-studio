@@ -215,5 +215,5 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: "internal_error" });
 });
 app.listen(config.port, () => {
-  logEvent("api_listen", { port: config.port, mode: mode() });
+  logEvent("api_listen", { port: config.port, mode: mode(), mediaRoot: config.mediaRoot });
 });
