@@ -21,6 +21,15 @@ const MONTHS: Record<string, number> = {
   july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
   jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 };
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
 export function parseSearchQuery(q: string): ParsedQuery {
   let rest = q.trim();
   const parsed: ParsedQuery = { textTokens: [] };
@@ -43,7 +52,7 @@ export function parseSearchQuery(q: string): ParsedQuery {
     const yearOnly = rest.match(/\b(20\d{2})\b/);
     if (yearOnly) { parsed.year = Number(yearOnly[1]); rest = rest.replace(yearOnly[0], " "); }
   }
-  parsed.textTokens = rest.toLowerCase().split(/\s+/).filter(Boolean);
+  parsed.textTokens = tokenize(rest);
   return parsed;
 }
 export function inferPlaceFromPath(filePath?: string | null): string | null {
@@ -64,6 +73,17 @@ export function matchesSearch(item: SearchableMedia, rawQuery: string): boolean 
   if (q.year && item.dateTaken && item.dateTaken.getUTCFullYear() !== q.year) return false;
   if (q.month && item.dateTaken && item.dateTaken.getUTCMonth() + 1 !== q.month) return false;
   if (!q.textTokens.length) return true;
-  const hay = [item.filePath, item.locationName, item.tripTitle, item.aiDescription, inferPlaceFromPath(item.filePath), item.dateTaken?.toISOString()].filter(Boolean).join(" ").toLowerCase();
-  return q.textTokens.every((token) => hay.includes(token));
+  const hay = [
+    item.filePath,
+    item.locationName,
+    item.tripTitle,
+    item.aiDescription,
+    inferPlaceFromPath(item.filePath),
+    item.dateTaken?.toISOString(),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const hayNorm = hay.replace(/[^a-z0-9]+/g, " ");
+  return q.textTokens.every((token) => hay.includes(token) || hayNorm.includes(token));
 }
