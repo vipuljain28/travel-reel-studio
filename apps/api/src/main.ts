@@ -19,13 +19,7 @@ app.use(express.json({ limit: "2mb" }));
 const v1 = express.Router();
 
 v1.get("/health", (_req, res) => {
-  res.json(
-    buildHealth({
-      googlePhotos: config.googlePhotos,
-      gemini: config.gemini,
-      places: config.places,
-    }),
-  );
+  res.json(buildHealth({ googlePhotos: config.googlePhotos, gemini: config.gemini, places: config.places }));
 });
 
 v1.post("/media/scan", async (_req, res) => {
@@ -42,17 +36,14 @@ v1.get("/media/search", async (req, res) => {
   const trips = await prisma.trip.findMany();
   const tripMap = new Map(trips.map((t) => [t.id, t.title]));
   const matched = items.filter((m) =>
-    matchesSearch(
-      {
-        filePath: m.filePath,
-        locationName: m.locationName,
-        tripTitle: m.tripId ? tripMap.get(m.tripId) : null,
-        dateTaken: m.dateTaken,
-        qualityScore: m.qualityScore,
-        aiDescription: m.aiDescription,
-      },
-      q,
-    ),
+    matchesSearch({
+      filePath: m.filePath,
+      locationName: m.locationName,
+      tripTitle: m.tripId ? tripMap.get(m.tripId) : null,
+      dateTaken: m.dateTaken,
+      qualityScore: m.qualityScore,
+      aiDescription: m.aiDescription,
+    }, q),
   );
   res.json({ query: q, items: matched });
 });
@@ -61,16 +52,20 @@ v1.get("/media/duplicates", async (_req, res) => {
   res.json({ items: await prisma.media.findMany({ where: { duplicateGroupId: { not: null } } }) });
 });
 
+v1.get("/media/:id", async (req, res) => {
+  const item = await prisma.media.findUnique({ where: { id: req.params.id } });
+  if (!item) return res.status(404).json({ error: "not found" });
+  res.json(item);
+});
+
 v1.post("/trips/detect", async (_req, res) => {
   const media = await prisma.media.findMany();
-  const detected = detectTrips(
-    media.map((m) => ({
-      dateTaken: m.dateTaken ?? m.createdAt,
-      latitude: m.latitude,
-      longitude: m.longitude,
-      locationName: m.locationName,
-    })),
-  );
+  const detected = detectTrips(media.map((m) => ({
+    dateTaken: m.dateTaken ?? m.createdAt,
+    latitude: m.latitude,
+    longitude: m.longitude,
+    locationName: m.locationName,
+  })));
   const created = [];
   for (const trip of detected) {
     const row = await prisma.trip.create({
@@ -178,10 +173,7 @@ v1.post("/render", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "not found" });
   const job = await prisma.renderJob.create({ data: { projectId, status: "QUEUED" } });
-  res.status(202).json({
-    job,
-    message: "Job queued. FFmpeg encode lands in Phase 8; render plan is already stored on the project.",
-  });
+  res.status(202).json({ job, message: "Job queued. FFmpeg encode lands in Phase 8." });
 });
 
 v1.get("/render/:id", async (req, res) => {
@@ -191,32 +183,23 @@ v1.get("/render/:id", async (req, res) => {
 });
 
 v1.get("/integrations/google-photos", (_req, res) => {
-  res.json({
-    configured: config.googlePhotos,
-    status: config.googlePhotos ? "configured" : "disconnected",
-    note: "OAuth connect is Phase 4. App works in local mode without it.",
-  });
+  res.json({ configured: config.googlePhotos, status: config.googlePhotos ? "configured" : "disconnected" });
 });
-
 v1.get("/integrations/gemini", (_req, res) => {
   res.json({ configured: config.gemini, status: config.gemini ? "configured" : "not_configured" });
 });
-
 v1.get("/integrations/places", (_req, res) => {
   res.json({ configured: config.places, status: config.places ? "configured" : "not_configured" });
 });
-
 v1.get("/usage", async (_req, res) => {
   res.json(await snapshot());
 });
 
 app.use(API_PREFIX, v1);
-
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logEvent("unhandled_error", { message: err.message });
   res.status(500).json({ error: "internal_error" });
 });
-
 app.listen(config.port, () => {
   logEvent("api_listen", { port: config.port, mode: mode() });
 });
