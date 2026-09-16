@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { API_PREFIX, TEMPLATES } from "@trs/shared";
-import { matchesSearch, detectTrips } from "@trs/media-analyzer";
+import { matchesSearch } from "@trs/media-analyzer";
 import { buildRenderPlan, validateRenderPlan } from "@trs/reel-engine";
 import { getAiProvider } from "@trs/ai-director";
 import type { TemplateId } from "@trs/shared";
@@ -11,25 +11,22 @@ import { scanMediaRoot } from "./scanner.js";
 import { snapshot } from "./usage.js";
 import { logEvent } from "./logger.js";
 import { buildHealth } from "./health.js";
+import { detectAndPersistTrips } from "./trips-service.js";
 
 const app = express();
 app.use(cors({ origin: config.webOrigin }));
 app.use(express.json({ limit: "2mb" }));
-
 const v1 = express.Router();
 
 v1.get("/health", (_req, res) => {
   res.json(buildHealth({ googlePhotos: config.googlePhotos, gemini: config.gemini, places: config.places }));
 });
-
 v1.post("/media/scan", async (_req, res) => {
   res.json(await scanMediaRoot());
 });
-
 v1.get("/media", async (_req, res) => {
   res.json({ items: await prisma.media.findMany({ orderBy: { dateTaken: "desc" } }) });
 });
-
 v1.get("/media/search", async (req, res) => {
   const q = String(req.query.q || "");
   const items = await prisma.media.findMany();
@@ -43,50 +40,34 @@ v1.get("/media/search", async (req, res) => {
       dateTaken: m.dateTaken,
       qualityScore: m.qualityScore,
       aiDescription: m.aiDescription,
+      mediaType: m.mediaType,
     }, q),
   );
   res.json({ query: q, items: matched });
 });
-
 v1.get("/media/duplicates", async (_req, res) => {
   res.json({ items: await prisma.media.findMany({ where: { duplicateGroupId: { not: null } } }) });
 });
-
 v1.get("/media/:id", async (req, res) => {
   const item = await prisma.media.findUnique({ where: { id: req.params.id } });
   if (!item) return res.status(404).json({ error: "not found" });
   res.json(item);
 });
-
-v1.post("/trips/detect", async (_req, res) => {
-  const media = await prisma.media.findMany();
-  const detected = detectTrips(media.map((m) => ({
-    dateTaken: m.dateTaken ?? m.createdAt,
-    latitude: m.latitude,
-    longitude: m.longitude,
-    locationName: m.locationName,
-  })));
-  const created = [];
-  for (const trip of detected) {
-    const row = await prisma.trip.create({
-      data: { title: trip.title, startDate: trip.startDate, endDate: trip.endDate, placeName: trip.title },
-    });
-    for (const idx of trip.mediaIndexes) {
-      await prisma.media.update({ where: { id: media[idx].id }, data: { tripId: row.id } });
-    }
-    created.push(row);
-  }
-  res.json({ trips: created });
+v1.post("/trips/detect", async (req, res) => {
+  const replace = String(req.query.replace ?? "true") !== "false";
+  res.json({ trips: await detectAndPersistTrips(replace) });
 });
-
 v1.get("/trips", async (_req, res) => {
   res.json({ items: await prisma.trip.findMany({ include: { media: true } }) });
 });
-
+v1.get("/trips/:id", async (req, res) => {
+  const trip = await prisma.trip.findUnique({ where: { id: req.params.id }, include: { media: true } });
+  if (!trip) return res.status(404).json({ error: "not found" });
+  res.json(trip);
+});
 v1.get("/templates", (_req, res) => {
   res.json({ items: TEMPLATES });
 });
-
 v1.post("/projects", async (req, res) => {
   const project = await prisma.project.create({
     data: {
@@ -97,17 +78,14 @@ v1.post("/projects", async (req, res) => {
   });
   res.status(201).json(project);
 });
-
 v1.get("/projects", async (_req, res) => {
   res.json({ items: await prisma.project.findMany({ orderBy: { createdAt: "desc" } }) });
 });
-
 v1.get("/projects/:id", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.id } });
   if (!project) return res.status(404).json({ error: "not found" });
   res.json(project);
 });
-
 v1.patch("/projects/:id", async (req, res) => {
   const project = await prisma.project.update({
     where: { id: req.params.id },
@@ -123,7 +101,6 @@ v1.patch("/projects/:id", async (req, res) => {
   });
   res.json(project);
 });
-
 v1.post("/projects/:id/storyboard", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.id } });
   if (!project) return res.status(404).json({ error: "not found" });
@@ -151,7 +128,6 @@ v1.post("/projects/:id/storyboard", async (req, res) => {
   });
   res.json({ project: updated, storyboard, aiMode: config.gemini ? "gemini" : "mock-local" });
 });
-
 v1.get("/projects/:id/render-plan", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.id } });
   if (!project) return res.status(404).json({ error: "not found" });
@@ -167,7 +143,6 @@ v1.get("/projects/:id/render-plan", async (req, res) => {
   await prisma.project.update({ where: { id: project.id }, data: { renderPlan: JSON.stringify(plan) } });
   res.json(plan);
 });
-
 v1.post("/render", async (req, res) => {
   const projectId = String(req.body.projectId || "");
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -175,13 +150,11 @@ v1.post("/render", async (req, res) => {
   const job = await prisma.renderJob.create({ data: { projectId, status: "QUEUED" } });
   res.status(202).json({ job, message: "Job queued. FFmpeg encode lands in Phase 8." });
 });
-
 v1.get("/render/:id", async (req, res) => {
   const job = await prisma.renderJob.findUnique({ where: { id: req.params.id } });
   if (!job) return res.status(404).json({ error: "not found" });
   res.json(job);
 });
-
 v1.get("/integrations/google-photos", (_req, res) => {
   res.json({ configured: config.googlePhotos, status: config.googlePhotos ? "configured" : "disconnected" });
 });
