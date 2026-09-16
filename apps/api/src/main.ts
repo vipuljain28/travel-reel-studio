@@ -12,6 +12,7 @@ import { snapshot } from "./usage.js";
 import { logEvent } from "./logger.js";
 import { buildHealth } from "./health.js";
 import { detectAndPersistTrips } from "./trips-service.js";
+import { authorizationUrl, photosConfigured } from "./photos/oauth.js";
 
 const app = express();
 app.use(cors({ origin: config.webOrigin }));
@@ -155,8 +156,30 @@ v1.get("/render/:id", async (req, res) => {
   if (!job) return res.status(404).json({ error: "not found" });
   res.json(job);
 });
-v1.get("/integrations/google-photos", (_req, res) => {
-  res.json({ configured: config.googlePhotos, status: config.googlePhotos ? "configured" : "disconnected" });
+v1.get("/integrations/google-photos", async (_req, res) => {
+  const sync = await prisma.syncState.findUnique({ where: { provider: "google-photos" } });
+  res.json({
+    enabledFlag: config.googlePhotos,
+    configured: photosConfigured(),
+    status: photosConfigured() ? sync?.status || "configured" : "disconnected",
+    lastSync: sync?.lastSync ?? null,
+    itemsProcessed: sync?.itemsProcessed ?? 0,
+    note: "photoslibrary.readonly only. Media IDs cached; temporary base URLs are never stored.",
+  });
+});
+v1.get("/integrations/google-photos/connect", (_req, res) => {
+  if (!photosConfigured()) {
+    return res.status(400).json({ error: "google_photos_disabled" });
+  }
+  res.json({ authorizationUrl: authorizationUrl("trs") });
+});
+v1.post("/integrations/google-photos/disconnect", async (_req, res) => {
+  await prisma.syncState.deleteMany({ where: { provider: "google-photos" } });
+  res.json({ status: "disconnected" });
+});
+v1.post("/integrations/google-photos/sync", async (_req, res) => {
+  if (!photosConfigured()) return res.status(400).json({ error: "google_photos_disabled" });
+  res.status(202).json({ status: "accepted", message: "Sync uses PhotosClient + quota Budget after OAuth tokens exist." });
 });
 v1.get("/integrations/gemini", (_req, res) => {
   res.json({ configured: config.gemini, status: config.gemini ? "configured" : "not_configured" });
