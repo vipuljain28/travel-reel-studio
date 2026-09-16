@@ -2,7 +2,9 @@ import { config } from "../config.js";
 import { prisma } from "../prisma.js";
 import { saveTokens, loadTokens, clearTokens } from "./tokens.js";
 
-const SCOPE = "https://www.googleapis.com/auth/photoslibrary.readonly";
+export const PHOTOS_SCOPES = [
+  "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+].join(" ");
 
 export function photosConfigured(): boolean {
   return Boolean(config.googlePhotos && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -13,7 +15,7 @@ export function authorizationUrl(state: string): string {
     client_id: process.env.GOOGLE_CLIENT_ID || "",
     redirect_uri: process.env.GOOGLE_REDIRECT_URI || "",
     response_type: "code",
-    scope: SCOPE,
+    scope: PHOTOS_SCOPES,
     access_type: "offline",
     prompt: "consent",
     state,
@@ -56,9 +58,7 @@ export async function exchangeCode(code: string) {
       create: { provider: "google-photos", status: "connected" },
       update: { status: "connected", errors: null },
     });
-  } catch {
-    /* sync table should already exist */
-  }
+  } catch { /* ignore */ }
 }
 
 export async function getAccessToken(): Promise<string> {
@@ -97,7 +97,5 @@ export async function disconnectPhotos(): Promise<void> {
   await clearTokens();
   try {
     await prisma.syncState.deleteMany({ where: { provider: "google-photos" } });
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
