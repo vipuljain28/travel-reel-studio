@@ -13,6 +13,7 @@ import { logEvent } from "./logger.js";
 import { buildHealth } from "./health.js";
 import { detectAndPersistTrips } from "./trips-service.js";
 import { authorizationUrl, photosConfigured } from "./photos/oauth.js";
+import { resolvePlace } from "./places/service.js";
 
 const app = express();
 app.use(cors({ origin: config.webOrigin }));
@@ -168,9 +169,7 @@ v1.get("/integrations/google-photos", async (_req, res) => {
   });
 });
 v1.get("/integrations/google-photos/connect", (_req, res) => {
-  if (!photosConfigured()) {
-    return res.status(400).json({ error: "google_photos_disabled" });
-  }
+  if (!photosConfigured()) return res.status(400).json({ error: "google_photos_disabled" });
   res.json({ authorizationUrl: authorizationUrl("trs") });
 });
 v1.post("/integrations/google-photos/disconnect", async (_req, res) => {
@@ -179,13 +178,21 @@ v1.post("/integrations/google-photos/disconnect", async (_req, res) => {
 });
 v1.post("/integrations/google-photos/sync", async (_req, res) => {
   if (!photosConfigured()) return res.status(400).json({ error: "google_photos_disabled" });
-  res.status(202).json({ status: "accepted", message: "Sync uses PhotosClient + quota Budget after OAuth tokens exist." });
+  res.status(202).json({ status: "accepted" });
 });
 v1.get("/integrations/gemini", (_req, res) => {
   res.json({ configured: config.gemini, status: config.gemini ? "configured" : "not_configured" });
 });
 v1.get("/integrations/places", (_req, res) => {
-  res.json({ configured: config.places, status: config.places ? "configured" : "not_configured" });
+  res.json({
+    configured: config.places && Boolean(process.env.GOOGLE_PLACES_API_KEY),
+    status: config.places ? "configured" : "local-fallback",
+    fieldMask: "places.id,places.displayName,places.formattedAddress,places.location",
+  });
+});
+v1.post("/places/resolve", async (req, res) => {
+  const query = String(req.body.query || req.body.q || "");
+  res.json({ query, place: await resolvePlace(query) });
 });
 v1.get("/usage", async (_req, res) => {
   res.json(await snapshot());
