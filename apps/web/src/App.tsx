@@ -7,7 +7,11 @@ const api = (path: string, init?: RequestInit) =>
     ...init,
   }).then(async (r) => {
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || r.statusText);
+    if (!r.ok) {
+      const message = data.error || data.message || r.statusText;
+      console.error("[trs]", path, r.status, data);
+      throw new Error(message);
+    }
     return data;
   });
 
@@ -18,7 +22,10 @@ function Badge({ children }: { children: string }) {
 function Dashboard() {
   const [health, setHealth] = useState<any>(null);
   useEffect(() => {
-    api("/health").then(setHealth).catch(() => setHealth({ ok: false }));
+    api("/health").then(setHealth).catch((e) => {
+      console.error("[trs] health", e);
+      setHealth({ ok: false });
+    });
   }, []);
   return (
     <div>
@@ -156,28 +163,53 @@ function Integrations() {
   const [err, setErr] = useState("");
   const params = new URLSearchParams(window.location.search);
   const photosFlag = params.get("photos");
+  const reason = params.get("reason") || "";
   const load = () => {
-    api("/integrations/google-photos").then(setPhotos).catch((e) => setErr(e.message));
+    api("/integrations/google-photos").then((d) => {
+      setPhotos(d);
+      if (d.errors) console.error("[trs] photos status errors", d.errors);
+    }).catch((e) => {
+      console.error("[trs] photos status", e);
+      setErr(e.message);
+    });
     api("/integrations/places").then(setPlaces);
     api("/integrations/gemini").then(setGemini);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (photosFlag === "error") console.error("[trs] photos callback error", reason || "missing_code_or_denied");
+    if (photosFlag === "connected") console.log("[trs] photos connected");
+    load();
+  }, []);
   return (
     <div>
       <h2>Integrations</h2>
       {photosFlag === "connected" && <p className="badge">Google Photos connected</p>}
-      {photosFlag === "error" && <p className="err">Google login failed or was cancelled. Open Connect again.</p>}
+      {photosFlag === "error" && <p className="err">Photos error: {reason || "missing_code or denied"}</p>}
       {err && <p className="err">{err}</p>}
       <div className="card">
         <strong>Google Photos</strong>
         <div>status: {photos?.status} · connected: {String(photos?.connected)}</div>
         <div>lastSync: {photos?.lastSync || "never"} · items: {photos?.itemsProcessed ?? 0}</div>
+        {photos?.errors && <pre className="err">{photos.errors}</pre>}
         <button onClick={async () => {
-          const d = await api("/integrations/google-photos/connect");
-          if (d.authorizationUrl) window.location.href = d.authorizationUrl;
-          else setErr("no authorizationUrl");
+          try {
+            const d = await api("/integrations/google-photos/connect");
+            console.log("[trs] photos login URL", d.authorizationUrl);
+            if (d.authorizationUrl) window.location.href = d.authorizationUrl;
+            else setErr("no authorizationUrl");
+          } catch (e: any) {
+            console.error("[trs] photos connect", e);
+            setErr(e.message);
+          }
         }}>Connect Google Photos</button>
-        <button onClick={() => api("/integrations/google-photos/sync", { method: "POST" }).then(setPhotos).then(load).catch((e) => setErr(e.message))}>Sync library</button>
+        <button onClick={() => api("/integrations/google-photos/sync", { method: "POST" }).then((d) => {
+          console.log("[trs] photos sync", d);
+          setPhotos(d);
+          load();
+        }).catch((e) => {
+          console.error("[trs] photos sync", e);
+          setErr(e.message);
+        })}>Sync library</button>
       </div>
       <div className="card">Places: {places?.status}</div>
       <div className="card">Gemini: {gemini?.status}</div>
