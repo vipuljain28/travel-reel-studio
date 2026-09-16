@@ -4,19 +4,7 @@ Local-first AI-assisted travel media discovery and Instagram Reel generation.
 
 **AI is the director. FFmpeg is the renderer.** Google Photos, Places, and Gemini are optional.
 
-## Status
-
-Phased implementation. See `docs/PHASES.md`.
-
-Working now:
-
-- Monorepo (web + API + shared packages)
-- Health, config, Prisma schema, usage budgets
-- Local media scan (idempotent), search, trip detection
-- Mock AI director + RenderPlan generator
-- Dashboard shell
-
-Not yet: live Google OAuth, Gemini calls, FFmpeg MP4 encode.
+See `docs/PHASES.md` for the 10-phase status.
 
 ## Quick start
 
@@ -34,14 +22,23 @@ npm run dev
 - API: http://localhost:4000/api/v1/health
 - Web: http://localhost:5173
 
-Put photos under `MEDIA_ROOT` (default `./media`) then click **Scan Media**.
+Drop photos into `./media`, then Library → Scan.
+
+## Flow
+
+1. Scan local media
+2. Search / detect trips
+3. Create a project (destination text is enough)
+4. Generate storyboard (mock AI unless Gemini is enabled)
+5. Build RenderPlan
+6. Render (needs `ffmpeg` on PATH)
 
 ## Modes
 
 | Mode | Requirements |
 |---|---|
 | Local | none |
-| Hybrid | optional Photos / Gemini / Places flags |
-| Full AI | all three enabled |
+| Hybrid | any of Photos / Gemini / Places |
+| Full AI | all three |
 
-Without keys the app stays in Offline / Local mode and uses deterministic selection.
+Without keys the product still works offline.
