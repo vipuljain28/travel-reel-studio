@@ -12,9 +12,7 @@ import { snapshot } from "./usage.js";
 import { logEvent } from "./logger.js";
 import { buildHealth } from "./health.js";
 import { detectAndPersistTrips } from "./trips-service.js";
-import { authorizationUrl, photosConfigured, exchangeCode, photosConnected } from "./photos/oauth.js";
-import { HttpPhotosClient } from "./photos/http-client.js";
-import { syncGooglePhotos } from "./photos/sync.js";
+import { registerPhotosRoutes } from "./photos/routes.js";
 import { resolvePlace } from "./places/service.js";
 import { renderJob } from "./renderer.js";
 import { rateLimitMiddleware } from "./rate-limit.js";
@@ -162,7 +160,7 @@ v1.post("/render", async (req, res) => {
   if (!project) return res.status(404).json({ error: "not found" });
   if (!project.renderPlan) return res.status(400).json({ error: "render_plan_missing" });
   const job = await prisma.renderJob.create({ data: { projectId, status: "QUEUED" } });
-  renderJob(job.id).catch(() => undefined);
+  renderJob(job.id).catch((e) => console.error("[render]", e));
   res.status(202).json({ job });
 });
 v1.get("/render/:id", async (req, res) => {
@@ -170,54 +168,9 @@ v1.get("/render/:id", async (req, res) => {
   if (!job) return res.status(404).json({ error: "not found" });
   res.json(job);
 });
-v1.get("/integrations/google-photos", async (_req, res) => {
-  const sync = await prisma.syncState.findUnique({ where: { provider: "google-photos" } });
-  const connected = await photosConnected();
-  res.json({
-    enabledFlag: config.googlePhotos,
-    configured: photosConfigured(),
-    connected,
-    status: connected ? sync?.status || "connected" : photosConfigured() ? "configured" : "disconnected",
-    lastSync: sync?.lastSync ?? null,
-    itemsProcessed: sync?.itemsProcessed ?? 0,
-    errors: sync?.errors ?? null,
-    note: "photoslibrary.readonly only. Media IDs cached; temporary base URLs are never stored.",
-  });
-});
-v1.get("/integrations/google-photos/connect", (_req, res) => {
-  if (!photosConfigured()) return res.status(400).json({ error: "google_photos_disabled" });
-  res.json({ authorizationUrl: authorizationUrl("trs") });
-});
-v1.get("/integrations/google-photos/callback", async (req, res) => {
-  const err = String(req.query.error || "");
-  const code = String(req.query.code || "");
-  const web = config.webOrigin.replace(/\/$/, "");
-  if (err || !code) {
-    return res.redirect(`${web}/settings?photos=error`);
-  }
-  try {
-    await exchangeCode(code);
-    return res.redirect(`${web}/settings?photos=connected`);
-  } catch (e) {
-    logEvent("photos_oauth_failed", { message: e instanceof Error ? e.message : "oauth_failed" });
-    return res.redirect(`${web}/settings?photos=error`);
-  }
-});
-v1.post("/integrations/google-photos/disconnect", async (_req, res) => {
-  await prisma.integrationCredential.deleteMany({ where: { provider: "google-photos" } });
-  await prisma.syncState.deleteMany({ where: { provider: "google-photos" } });
-  res.json({ status: "disconnected" });
-});
-v1.post("/integrations/google-photos/sync", async (_req, res) => {
-  if (!photosConfigured()) return res.status(400).json({ error: "google_photos_disabled" });
-  if (!(await photosConnected())) return res.status(400).json({ error: "photos_not_connected" });
-  try {
-    const result = await syncGooglePhotos(new HttpPhotosClient());
-    res.json(result);
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "sync_failed" });
-  }
-});
+
+registerPhotosRoutes(v1);
+
 v1.get("/integrations/gemini", (_req, res) => {
   res.json({ configured: config.gemini, status: config.gemini ? "configured" : "not_configured" });
 });
@@ -238,8 +191,9 @@ v1.get("/usage", async (_req, res) => {
 
 app.use(API_PREFIX, v1);
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[api] unhandled", err);
   logEvent("unhandled_error", { message: err.message });
-  res.status(500).json({ error: "internal_error" });
+  res.status(500).json({ error: "internal_error", message: err.message });
 });
 app.listen(config.port, () => {
   logEvent("api_listen", { port: config.port, mode: mode(), mediaRoot: config.mediaRoot });
