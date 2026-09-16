@@ -24,6 +24,7 @@ export const TEMPLATES = [
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number]["id"];
 export interface RenderPlan {
+  version?: number;
   canvas: { width: number; height: number; fps: number };
   duration: number;
   clips: Array<{ mediaId: string; start: number; duration: number; crop: { mode: "cover" | "contain" }; transition: "cut" | "fade" }>;
