@@ -5,10 +5,10 @@
 | 1 | Foundation | verified |
 | 2 | Local Media | verified |
 | 3 | Search + Trips | verified |
-| 4 | Google Photos | next |
-| 5 | Places | planned |
-| 6 | Gemini / AI Director | planned (mock exists) |
-| 7 | Reel Engine | planned (core exists) |
+| 4 | Google Photos | verified (offline-safe) |
+| 5 | Places | next |
+| 6 | Gemini / AI Director | planned |
+| 7 | Reel Engine | planned |
 | 8 | FFmpeg Renderer | planned |
-| 9 | UX | planned (shell exists) |
+| 9 | UX | planned |
 | 10 | Hardening | planned |
