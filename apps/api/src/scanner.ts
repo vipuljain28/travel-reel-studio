@@ -14,7 +14,13 @@ async function writeThumbPointer(sha256: string, filePath: string): Promise<stri
   return dest;
 }
 
-export async function scanMediaRoot(): Promise<{ scanned: number; upserted: number; skipped: number; duplicates: number }> {
+export async function scanMediaRoot(): Promise<{
+  root: string;
+  scanned: number;
+  upserted: number;
+  skipped: number;
+  duplicates: number;
+}> {
   const root = path.resolve(config.mediaRoot);
   await fs.mkdir(root, { recursive: true });
   const files = await walkMediaFiles(root);
@@ -27,8 +33,14 @@ export async function scanMediaRoot(): Promise<{ scanned: number; upserted: numb
       where: { provider_filePath: { provider: "local", filePath } },
     });
     const analyzed = await analyzeFile(filePath, stat.mtime, stat.size);
-    if (!analyzed) { skipped += 1; continue; }
-    if (existing?.sha256 === analyzed.sha256 && existing.fileSize === stat.size) { skipped += 1; continue; }
+    if (!analyzed) {
+      skipped += 1;
+      continue;
+    }
+    if (existing?.sha256 === analyzed.sha256 && existing.fileSize === stat.size) {
+      skipped += 1;
+      continue;
+    }
     const thumbnailPath = await writeThumbPointer(analyzed.sha256, filePath);
     const payload = {
       mediaType: analyzed.mediaType,
@@ -64,6 +76,6 @@ export async function scanMediaRoot(): Promise<{ scanned: number; upserted: numb
     duplicates += g._count.sha256;
     await prisma.media.updateMany({ where: { sha256: g.sha256 }, data: { duplicateGroupId: g.sha256 } });
   }
-  logEvent("media_scan", { scanned: files.length, upserted, skipped, duplicates });
-  return { scanned: files.length, upserted, skipped, duplicates };
+  logEvent("media_scan", { root, scanned: files.length, upserted, skipped, duplicates });
+  return { root, scanned: files.length, upserted, skipped, duplicates };
 }
