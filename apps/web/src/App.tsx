@@ -50,7 +50,7 @@ function Library() {
         {items.map((m) => (
           <div className="card" key={m.id}>
             <strong>{(m.filePath || m.providerMediaId || m.id).split(/[/\\]/).pop()}</strong>
-            <div>{m.locationName || m.provider} · q {Number(m.qualityScore || 0).toFixed(2)}</div>
+            <div>{m.provider} · {m.locationName || "no place"} · q {Number(m.qualityScore || 0).toFixed(2)}</div>
           </div>
         ))}
       </div>
@@ -69,7 +69,7 @@ function Search() {
       <p>{items.length} matches</p>
       <div className="grid">
         {items.map((m) => (
-          <div className="card" key={m.id}>{m.filePath || m.id}<div>{m.locationName}</div></div>
+          <div className="card" key={m.id}>{m.filePath || m.id}<div>{m.provider} · {m.locationName}</div></div>
         ))}
       </div>
     </div>
@@ -153,16 +153,32 @@ function Integrations() {
   const [photos, setPhotos] = useState<any>(null);
   const [places, setPlaces] = useState<any>(null);
   const [gemini, setGemini] = useState<any>(null);
-  useEffect(() => {
-    api("/integrations/google-photos").then(setPhotos);
+  const [err, setErr] = useState("");
+  const params = new URLSearchParams(window.location.search);
+  const photosFlag = params.get("photos");
+  const load = () => {
+    api("/integrations/google-photos").then(setPhotos).catch((e) => setErr(e.message));
     api("/integrations/places").then(setPlaces);
     api("/integrations/gemini").then(setGemini);
-  }, []);
+  };
+  useEffect(() => { load(); }, []);
   return (
     <div>
       <h2>Integrations</h2>
-      <p>All optional. App stays local if disconnected.</p>
-      <div className="card">Photos: {photos?.status}</div>
+      {photosFlag === "connected" && <p className="badge">Google Photos connected</p>}
+      {photosFlag === "error" && <p className="err">Google login failed or was cancelled. Open Connect again.</p>}
+      {err && <p className="err">{err}</p>}
+      <div className="card">
+        <strong>Google Photos</strong>
+        <div>status: {photos?.status} · connected: {String(photos?.connected)}</div>
+        <div>lastSync: {photos?.lastSync || "never"} · items: {photos?.itemsProcessed ?? 0}</div>
+        <button onClick={async () => {
+          const d = await api("/integrations/google-photos/connect");
+          if (d.authorizationUrl) window.location.href = d.authorizationUrl;
+          else setErr("no authorizationUrl");
+        }}>Connect Google Photos</button>
+        <button onClick={() => api("/integrations/google-photos/sync", { method: "POST" }).then(setPhotos).then(load).catch((e) => setErr(e.message))}>Sync library</button>
+      </div>
       <div className="card">Places: {places?.status}</div>
       <div className="card">Gemini: {gemini?.status}</div>
     </div>
@@ -175,7 +191,6 @@ function Usage() {
   return (
     <div>
       <h2>Usage budgets</h2>
-      <p>Application safety limits — not official Google quotas.</p>
       <pre>{JSON.stringify(data, null, 2)}</pre>
     </div>
   );
