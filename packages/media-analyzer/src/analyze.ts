@@ -25,14 +25,25 @@ export interface AnalyzedMedia {
 
 async function ffprobeJson(filePath: string): Promise<Record<string, unknown> | null> {
   return new Promise((resolve) => {
-    const child = spawn("ffprobe", ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", filePath], { stdio: ["ignore", "pipe", "ignore"] });
+    const child = spawn(
+      "ffprobe",
+      ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", filePath],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
     const chunks: Buffer[] = [];
     child.stdout.on("data", (c: Buffer) => chunks.push(c));
     child.on("error", () => resolve(null));
     child.on("close", (code) => {
-      if (code !== 0) return resolve(null);
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-      catch { resolve(null); }
+      if (code !== 0) {
+        resolve(null);
+        return;
+      }
+      try {
+        const text = Buffer.concat(chunks).toString("utf8");
+        resolve(JSON.parse(text));
+      } catch {
+        resolve(null);
+      }
     });
   });
 }
@@ -55,14 +66,30 @@ function sampleStats(buf: Buffer): { sharpness: number; exposure: number } {
   return { sharpness: Math.min(1, diff / n / 40), exposure: 1 - Math.abs(mean - 0.5) * 2 };
 }
 
-export async function analyzeFile(filePath: string, mtime: Date, fileSize: number): Promise<AnalyzedMedia | null> {
+export async function analyzeFile(
+  filePath: string,
+  mtime: Date,
+  fileSize: number,
+): Promise<AnalyzedMedia | null> {
   const ext = extOf(filePath);
   const mediaType = mediaTypeOf(ext);
   if (!mediaType) return null;
   const sha256 = await sha256File(filePath);
   const head = await fs.readFile(filePath).catch(() => null);
   if (!head) {
-    return { filePath, mediaType, mimeType: mimeOf(ext), fileSize, dateTaken: mtime, sha256, qualityScore: 0, sharpnessScore: 0, exposureScore: 0, compositionScore: 0, readable: false };
+    return {
+      filePath,
+      mediaType,
+      mimeType: mimeOf(ext),
+      fileSize,
+      dateTaken: mtime,
+      sha256,
+      qualityScore: 0,
+      sharpnessScore: 0,
+      exposureScore: 0,
+      compositionScore: 0,
+      readable: false,
+    };
   }
   let width: number | undefined;
   let height: number | undefined;
@@ -72,7 +99,10 @@ export async function analyzeFile(filePath: string, mtime: Date, fileSize: numbe
   let exposure = 0.5;
   if (mediaType === "image") {
     const size = imageSizeFromBuffer(head);
-    if (size) { width = size.width; height = size.height; }
+    if (size) {
+      width = size.width;
+      height = size.height;
+    }
     const exifDate = jpegExifDate(head);
     if (exifDate) dateTaken = exifDate;
     const stats = sampleStats(head);
@@ -86,13 +116,22 @@ export async function analyzeFile(filePath: string, mtime: Date, fileSize: numbe
       if (video) {
         width = Number(video.width) || undefined;
         height = Number(video.height) || undefined;
-        const dur = Number(video.duration ?? (probe.format as { duration?: string })?.duration);
+        const format = probe.format as { duration?: string } | undefined;
+        const dur = Number(video.duration ?? format?.duration);
         if (Number.isFinite(dur)) duration = dur;
       }
     }
   }
   return {
-    filePath, mediaType, mimeType: mimeOf(ext), fileSize, width, height, duration, dateTaken, sha256,
+    filePath,
+    mediaType,
+    mimeType: mimeOf(ext),
+    fileSize,
+    width,
+    height,
+    duration,
+    dateTaken,
+    sha256,
     pHash: simpleDHashFromBytes(head.subarray(0, 4096)),
     qualityScore: scoreMedia({ width, height, sharpness, exposure, readable: true }),
     sharpnessScore: sharpness,
