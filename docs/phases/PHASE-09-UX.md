@@ -1,3 +1,6 @@
 # Phase 9 — UX
 
-Screens: Dashboard, Library, Search, Trips, Project, Storyboard, Render, Settings, Integrations, Usage.
+Status: **verified**
+
+Screens: Dashboard, Library, Search, Trips, Projects, Project studio (storyboard / RenderPlan / render / poll), Integrations, Usage.
+Offline badge from `/health`. Vite proxies `/api` to `:4000`.

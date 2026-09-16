@@ -6,7 +6,10 @@ nav { background: #161c19; padding: 24px 16px; border-right: 1px solid #2a3a32; 
 nav h1 { font-size: 16px; margin: 0 0 20px; }
 nav a { display: block; padding: 8px 0; }
 main { padding: 28px; }
-button, input { background: #24332b; color: #e8efe9; border: 1px solid #3d5347; border-radius: 8px; padding: 8px 12px; margin-right: 8px; }
+button, input { background: #24332b; color: #e8efe9; border: 1px solid #3d5347; border-radius: 8px; padding: 8px 12px; margin: 0 8px 8px 0; }
 button { cursor: pointer; }
 pre { background: #111; padding: 12px; overflow: auto; border-radius: 8px; }
 .badge { display: inline-block; background: #2f5; color: #062; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
+.card { background: #18211d; border: 1px solid #2a3a32; border-radius: 12px; padding: 14px; display: block; }
+.err { color: #f88; }

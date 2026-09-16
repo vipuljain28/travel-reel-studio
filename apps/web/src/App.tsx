@@ -1,51 +1,186 @@
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Route, Routes, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-const api = (path: string, init?: RequestInit) => fetch(`/api/v1${path}`, init).then((r) => r.json());
+
+const api = (path: string, init?: RequestInit) =>
+  fetch(`/api/v1${path}`, {
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    ...init,
+  }).then(async (r) => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    return data;
+  });
+
+function Badge({ children }: { children: string }) {
+  return <span className="badge">{children}</span>;
+}
+
 function Dashboard() {
-  const [health, setHealth] = useState<Record<string, unknown> | null>(null);
-  useEffect(() => { api("/health").then(setHealth).catch(() => setHealth({ ok: false })); }, []);
+  const [health, setHealth] = useState<any>(null);
+  useEffect(() => {
+    api("/health").then(setHealth).catch(() => setHealth({ ok: false }));
+  }, []);
   return (
     <div>
       <h2>Dashboard</h2>
-      <p>Local-first Reel studio. AI directs; FFmpeg renders.</p>
-      {health?.offline ? <span className="badge">Offline Mode</span> : <span className="badge">Online integrations optional</span>}
+      <p>Local-first travel Reels. AI directs the storyboard. FFmpeg renders the file.</p>
+      {health?.offline ? <Badge>Offline Mode</Badge> : <Badge>Hybrid available</Badge>}
+      <div className="grid">
+        <Link className="card" to="/library">Scan library</Link>
+        <Link className="card" to="/search">Search a place</Link>
+        <Link className="card" to="/projects">Make a reel</Link>
+      </div>
       <pre>{JSON.stringify(health, null, 2)}</pre>
     </div>
   );
 }
+
 function Library() {
-  const [data, setData] = useState<unknown>(null);
+  const [items, setItems] = useState<any[]>([]);
+  const [scan, setScan] = useState<any>(null);
+  const load = () => api("/media").then((d) => setItems(d.items || []));
+  useEffect(() => { load(); }, []);
   return (
     <div>
-      <h2>Media Library</h2>
-      <button onClick={() => api("/media/scan", { method: "POST" }).then(setData)}>Scan Media</button>
-      <button onClick={() => api("/media").then(setData)}>Refresh</button>
-      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <h2>Library</h2>
+      <button onClick={() => api("/media/scan", { method: "POST" }).then(setScan).then(load)}>Scan MEDIA_ROOT</button>
+      <button onClick={load}>Refresh</button>
+      {scan && <p>{scan.upserted} upserted · {scan.skipped} skipped · {scan.duplicates} dups</p>}
+      <div className="grid">
+        {items.map((m) => (
+          <div className="card" key={m.id}>
+            <strong>{(m.filePath || m.providerMediaId || m.id).split(/[/\\]/).pop()}</strong>
+            <div>{m.locationName || m.provider} · q {Number(m.qualityScore || 0).toFixed(2)}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
+
 function Search() {
   const [q, setQ] = useState("Green Gate Resort, Mulshi");
-  const [data, setData] = useState<unknown>(null);
+  const [items, setItems] = useState<any[]>([]);
   return (
     <div>
       <h2>Search</h2>
-      <input value={q} onChange={(e) => setQ(e.target.value)} />
-      <button onClick={() => api(`/media/search?q=${encodeURIComponent(q)}`).then(setData)}>Search</button>
-      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <input value={q} onChange={(e) => setQ(e.target.value)} style={{ width: "min(480px, 80%)" }} />
+      <button onClick={() => api(`/media/search?q=${encodeURIComponent(q)}`).then((d) => setItems(d.items || []))}>Search</button>
+      <p>{items.length} matches</p>
+      <div className="grid">
+        {items.map((m) => (
+          <div className="card" key={m.id}>{m.filePath || m.id}<div>{m.locationName}</div></div>
+        ))}
+      </div>
     </div>
   );
 }
-function JsonPage({ title, path }: { title: string; path: string }) {
-  const [data, setData] = useState<unknown>(null);
+
+function Trips() {
+  const [items, setItems] = useState<any[]>([]);
+  const load = () => api("/trips").then((d) => setItems(d.items || []));
+  useEffect(() => { load(); }, []);
   return (
     <div>
-      <h2>{title}</h2>
-      <button onClick={() => api(path).then(setData)}>Load</button>
+      <h2>Trips</h2>
+      <button onClick={() => api("/trips/detect", { method: "POST" }).then(load)}>Detect trips</button>
+      {items.map((t) => (
+        <div className="card" key={t.id}>
+          <strong>{t.title}</strong>
+          <div>{t.media?.length ?? 0} clips</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Projects() {
+  const nav = useNavigate();
+  const [items, setItems] = useState<any[]>([]);
+  const [title, setTitle] = useState("Mulshi weekend reel");
+  const [destination, setDestination] = useState("Green Gate Resort, Mulshi");
+  const load = () => api("/projects").then((d) => setItems(d.items || []));
+  useEffect(() => { load(); }, []);
+  return (
+    <div>
+      <h2>Projects</h2>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input value={destination} onChange={(e) => setDestination(e.target.value)} />
+      <button onClick={async () => {
+        const p = await api("/projects", { method: "POST", body: JSON.stringify({ title, destination, templateId: "viral-travel" }) });
+        nav(`/projects/${p.id}`);
+      }}>Create</button>
+      {items.map((p) => (
+        <div className="card" key={p.id}>
+          <Link to={`/projects/${p.id}`}>{p.title}</Link>
+          <div>{p.destination} · {p.templateId}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProjectStudio() {
+  const id = location.pathname.split("/").pop() || "";
+  const [project, setProject] = useState<any>(null);
+  const [storyboard, setStoryboard] = useState<any>(null);
+  const [plan, setPlan] = useState<any>(null);
+  const [job, setJob] = useState<any>(null);
+  const [err, setErr] = useState("");
+  const load = () => api(`/projects/${id}`).then(setProject);
+  useEffect(() => { load(); }, [id]);
+  return (
+    <div>
+      <h2>{project?.title || "Project"}</h2>
+      {err && <p className="err">{err}</p>}
+      <button onClick={() => api(`/projects/${id}/storyboard`, { method: "POST", body: "{}" }).then((d) => { setStoryboard(d.storyboard); setProject(d.project); }).catch((e) => setErr(e.message))}>Generate storyboard</button>
+      <button onClick={() => api(`/projects/${id}/render-plan`).then(setPlan).catch((e) => setErr(e.message))}>Build RenderPlan</button>
+      <button onClick={async () => {
+        try {
+          const d = await api("/render", { method: "POST", body: JSON.stringify({ projectId: id }) });
+          setJob(d.job);
+        } catch (e: any) { setErr(e.message); }
+      }}>Render</button>
+      {job && <button onClick={() => api(`/render/${job.id}`).then(setJob)}>Poll job</button>}
+      {storyboard && <pre>{JSON.stringify(storyboard, null, 2)}</pre>}
+      {plan && <pre>{JSON.stringify(plan, null, 2)}</pre>}
+      {job && <pre>{JSON.stringify(job, null, 2)}</pre>}
+    </div>
+  );
+}
+
+function Integrations() {
+  const [photos, setPhotos] = useState<any>(null);
+  const [places, setPlaces] = useState<any>(null);
+  const [gemini, setGemini] = useState<any>(null);
+  useEffect(() => {
+    api("/integrations/google-photos").then(setPhotos);
+    api("/integrations/places").then(setPlaces);
+    api("/integrations/gemini").then(setGemini);
+  }, []);
+  return (
+    <div>
+      <h2>Integrations</h2>
+      <p>All optional. App stays local if disconnected.</p>
+      <div className="card">Photos: {photos?.status}</div>
+      <div className="card">Places: {places?.status}</div>
+      <div className="card">Gemini: {gemini?.status}</div>
+    </div>
+  );
+}
+
+function Usage() {
+  const [data, setData] = useState<any>(null);
+  useEffect(() => { api("/usage").then(setData); }, []);
+  return (
+    <div>
+      <h2>Usage budgets</h2>
+      <p>Application safety limits — not official Google quotas.</p>
       <pre>{JSON.stringify(data, null, 2)}</pre>
     </div>
   );
 }
+
 export default function App() {
   return (
     <div className="layout">
@@ -64,10 +199,11 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/library" element={<Library />} />
           <Route path="/search" element={<Search />} />
-          <Route path="/trips" element={<JsonPage title="Trips" path="/trips" />} />
-          <Route path="/projects" element={<JsonPage title="Projects" path="/projects" />} />
-          <Route path="/settings" element={<JsonPage title="Google Photos" path="/integrations/google-photos" />} />
-          <Route path="/usage" element={<JsonPage title="Usage budgets" path="/usage" />} />
+          <Route path="/trips" element={<Trips />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:id" element={<ProjectStudio />} />
+          <Route path="/settings" element={<Integrations />} />
+          <Route path="/usage" element={<Usage />} />
         </Routes>
       </main>
     </div>
