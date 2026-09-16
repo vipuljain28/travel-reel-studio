@@ -3,16 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local-first AI-assisted travel Reel generator",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @trs/api\" \"npm run dev -w @trs/web\"",
     "api:dev": "npm run dev -w @trs/api",
     "web:dev": "npm run dev -w @trs/web",
     "build": "npm run build -w @trs/shared && npm run build -w @trs/media-analyzer && npm run build -w @trs/reel-engine && npm run build -w @trs/ai-director && npm run build -w @trs/api && npm run build -w @trs/web",
-    "test": "npm run test -w @trs/media-analyzer && npm run test -w @trs/reel-engine && npm run test -w @trs/api",
+    "test": "npm run test -w @trs/media-analyzer && npm run test -w @trs/reel-engine && npm run test -w @trs/ai-director && npm run test -w @trs/api",
     "type-check": "npm run type-check --workspaces --if-present",
     "db:generate": "npm run prisma:generate -w @trs/api",
     "db:migrate": "npm run prisma:migrate -w @trs/api",
@@ -22,7 +19,5 @@
     "concurrently": "^9.1.2",
     "typescript": "^5.8.2"
   },
-  "engines": {
-    "node": ">=18"
-  }
+  "engines": { "node": ">=18" }
 }
