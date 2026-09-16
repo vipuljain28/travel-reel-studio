@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { prisma } from "../prisma.js";
+import { saveTokens, loadTokens, clearTokens } from "./tokens.js";
 
 const SCOPE = "https://www.googleapis.com/auth/photoslibrary.readonly";
 
@@ -43,34 +44,28 @@ export async function exchangeCode(code: string) {
   if (!res.ok || !json.access_token) {
     throw new Error(json.error_description || json.error || "token_exchange_failed");
   }
-  const expiresAt = new Date(Date.now() + (json.expires_in || 3600) * 1000);
-  const existing = await prisma.integrationCredential.findUnique({ where: { provider: "google-photos" } });
-  await prisma.integrationCredential.upsert({
-    where: { provider: "google-photos" },
-    create: {
-      provider: "google-photos",
-      accessToken: json.access_token,
-      refreshToken: json.refresh_token || null,
-      expiresAt,
-    },
-    update: {
-      accessToken: json.access_token,
-      refreshToken: json.refresh_token || existing?.refreshToken || null,
-      expiresAt,
-    },
+  const existing = await loadTokens();
+  await saveTokens({
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token || existing?.refreshToken || null,
+    expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
   });
-  await prisma.syncState.upsert({
-    where: { provider: "google-photos" },
-    create: { provider: "google-photos", status: "connected" },
-    update: { status: "connected", errors: null },
-  });
+  try {
+    await prisma.syncState.upsert({
+      where: { provider: "google-photos" },
+      create: { provider: "google-photos", status: "connected" },
+      update: { status: "connected", errors: null },
+    });
+  } catch {
+    /* sync table should already exist */
+  }
 }
 
 export async function getAccessToken(): Promise<string> {
-  const row = await prisma.integrationCredential.findUnique({ where: { provider: "google-photos" } });
+  const row = await loadTokens();
   if (!row) throw new Error("photos_not_connected");
-  const stillValid = row.expiresAt && row.expiresAt.getTime() > Date.now() + 60_000;
-  if (stillValid) return row.accessToken;
+  const exp = row.expiresAt ? Date.parse(row.expiresAt) : 0;
+  if (exp > Date.now() + 60_000) return row.accessToken;
   if (!row.refreshToken) throw new Error("photos_refresh_missing");
   const body = new URLSearchParams({
     refresh_token: row.refreshToken,
@@ -85,15 +80,24 @@ export async function getAccessToken(): Promise<string> {
   });
   const json = (await res.json()) as { access_token?: string; expires_in?: number; error?: string };
   if (!res.ok || !json.access_token) throw new Error(json.error || "photos_refresh_failed");
-  const expiresAt = new Date(Date.now() + (json.expires_in || 3600) * 1000);
-  await prisma.integrationCredential.update({
-    where: { provider: "google-photos" },
-    data: { accessToken: json.access_token, expiresAt },
+  await saveTokens({
+    accessToken: json.access_token,
+    refreshToken: row.refreshToken,
+    expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
   });
   return json.access_token;
 }
 
 export async function photosConnected(): Promise<boolean> {
-  const row = await prisma.integrationCredential.findUnique({ where: { provider: "google-photos" } });
+  const row = await loadTokens();
   return Boolean(row?.accessToken || row?.refreshToken);
+}
+
+export async function disconnectPhotos(): Promise<void> {
+  await clearTokens();
+  try {
+    await prisma.syncState.deleteMany({ where: { provider: "google-photos" } });
+  } catch {
+    /* ignore */
+  }
 }
