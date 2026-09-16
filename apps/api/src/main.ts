@@ -10,6 +10,7 @@ import { prisma } from "./prisma.js";
 import { scanMediaRoot } from "./scanner.js";
 import { snapshot } from "./usage.js";
 import { logEvent } from "./logger.js";
+import { buildHealth } from "./health.js";
 
 const app = express();
 app.use(cors({ origin: config.webOrigin }));
@@ -18,13 +19,13 @@ app.use(express.json({ limit: "2mb" }));
 const v1 = express.Router();
 
 v1.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    service: "travel-reel-studio",
-    mode: mode(),
-    offline: !config.googlePhotos && !config.gemini && !config.places,
-    features: { googlePhotos: config.googlePhotos, gemini: config.gemini, places: config.places },
-  });
+  res.json(
+    buildHealth({
+      googlePhotos: config.googlePhotos,
+      gemini: config.gemini,
+      places: config.places,
+    }),
+  );
 });
 
 v1.post("/media/scan", async (_req, res) => {
