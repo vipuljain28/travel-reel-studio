@@ -98,3 +98,10 @@ model SyncState {
   itemsProcessed Int       @default(0)
   errors         String?
 }
+model IntegrationCredential {
+  provider     String    @id
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  updatedAt    DateTime  @updatedAt
+}
