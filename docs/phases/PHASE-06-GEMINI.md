@@ -1,3 +1,5 @@
 # Phase 6 — Gemini / AI Director
 
-AiProvider interface, MockAiProvider default, Gemini optional. Two-pass ranking + storyboard JSON schema validation.
+Status: **verified**
+
+Two-pass director. Mock default. Gemini optional with schema validation and mock fallback.
