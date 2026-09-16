@@ -4,6 +4,8 @@ Local-first AI-assisted travel media discovery and Instagram Reel generation.
 
 **AI is the director. FFmpeg is the renderer.** Google Photos, Places, and Gemini are optional.
 
+**Full setup and usage:** [docs/SETUP-AND-USAGE.md](docs/SETUP-AND-USAGE.md)
+
 See `docs/PHASES.md` for the 10-phase status.
 
 ## Quick start
@@ -38,7 +40,7 @@ Drop photos into `./media`, then Library → Scan.
 | Mode | Requirements |
 |---|---|
 | Local | none |
-| Hybrid | any of Photos / Gemini / Places |
-| Full AI | all three |
+| Hybrid | optional Photos / Gemini / Places flags |
+| Full AI | all three enabled |
 
-Without keys the product still works offline.
+Without keys the app stays in Offline / Local mode and uses deterministic selection.
