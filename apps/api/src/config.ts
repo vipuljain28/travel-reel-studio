@@ -1,17 +1,35 @@
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { resolveMode, type AppMode } from "@trs/shared";
 
+function findRepoRoot(start: string): string {
+  let dir = start;
+  for (let i = 0; i < 8; i++) {
+    const pkg = path.join(dir, "package.json");
+    try {
+      const json = JSON.parse(fs.readFileSync(pkg, "utf8")) as { name?: string; workspaces?: unknown };
+      if (json.name === "travel-reel-studio" || json.workspaces) return dir;
+    } catch {
+      /* keep walking */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(start, "../../..");
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url));
-/** apps/api/src → repo root */
-export const repoRoot = path.resolve(here, "../../..");
+export const repoRoot = findRepoRoot(here);
 
 dotenv.config({ path: path.join(repoRoot, ".env") });
 
 function resolveDir(value: string | undefined, fallback: string): string {
   const raw = value && value.trim() ? value : fallback;
-  return path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(repoRoot, raw);
+  if (path.isAbsolute(raw)) return path.resolve(raw);
+  return path.resolve(repoRoot, raw);
 }
 
 export const config = {
