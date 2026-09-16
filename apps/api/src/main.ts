@@ -15,10 +15,17 @@ import { detectAndPersistTrips } from "./trips-service.js";
 import { authorizationUrl, photosConfigured } from "./photos/oauth.js";
 import { resolvePlace } from "./places/service.js";
 import { renderJob } from "./renderer.js";
+import { rateLimitMiddleware } from "./rate-limit.js";
 
 const app = express();
 app.use(cors({ origin: config.webOrigin }));
 app.use(express.json({ limit: "2mb" }));
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  next();
+});
+app.use(rateLimitMiddleware(120) as express.RequestHandler);
 const v1 = express.Router();
 
 v1.get("/health", (_req, res) => {
