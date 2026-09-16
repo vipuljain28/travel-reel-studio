@@ -1,16 +1,9 @@
 import type { RenderPlan, TemplateId } from "@trs/shared";
 import { TEMPLATE_CONFIG } from "./templates.js";
-
 export { TEMPLATE_CONFIG } from "./templates.js";
 export type { TemplateConfig } from "./templates.js";
-
-export function buildRenderPlan(input: {
-  mediaIds: string[];
-  template: TemplateId;
-  duration?: number;
-  hook?: string;
-  caption?: string;
-}): RenderPlan {
+export * from "./ffmpeg.js";
+export function buildRenderPlan(input: { mediaIds: string[]; template: TemplateId; duration?: number; hook?: string; caption?: string; }): RenderPlan {
   const tpl = TEMPLATE_CONFIG[input.template] ?? TEMPLATE_CONFIG["viral-travel"];
   const ids = input.mediaIds.filter(Boolean).slice(0, 12);
   const duration = input.duration ?? Math.max(8, Math.round(Math.max(1, ids.length) * tpl.clipSeconds));
@@ -20,41 +13,13 @@ export function buildRenderPlan(input: {
     const last = i === ids.length - 1;
     const d = last ? Math.max(1.2, Number((duration - t).toFixed(3))) : tpl.clipSeconds;
     t += d;
-    return {
-      mediaId,
-      start,
-      duration: d,
-      crop: { mode: "cover" as const },
-      transition: tpl.transition,
-    };
+    return { mediaId, start, duration: d, crop: { mode: "cover" as const }, transition: tpl.transition };
   });
   const overlays: RenderPlan["overlays"] = [];
-  if (input.hook) {
-    overlays.push({
-      text: input.hook,
-      start: 0,
-      duration: Math.min(tpl.hookSeconds, duration),
-      position: "center",
-    });
-  }
-  if (input.caption) {
-    overlays.push({
-      text: input.caption,
-      start: Math.max(0, duration - 2.4),
-      duration: Math.min(2.4, duration),
-      position: tpl.captionPosition,
-    });
-  }
-  return {
-    version: 1,
-    canvas: { width: 1080, height: 1920, fps: 30 },
-    duration,
-    clips,
-    overlays,
-    audio: { volume: tpl.audioVolume },
-  };
+  if (input.hook) overlays.push({ text: input.hook, start: 0, duration: Math.min(tpl.hookSeconds, duration), position: "center" });
+  if (input.caption) overlays.push({ text: input.caption, start: Math.max(0, duration - 2.4), duration: Math.min(2.4, duration), position: tpl.captionPosition });
+  return { version: 1, canvas: { width: 1080, height: 1920, fps: 30 }, duration, clips, overlays, audio: { volume: tpl.audioVolume } };
 }
-
 export function validateRenderPlan(plan: RenderPlan): string[] {
   const errors: string[] = [];
   if (plan.canvas.width !== 1080 || plan.canvas.height !== 1920) errors.push("canvas must be 1080x1920");
