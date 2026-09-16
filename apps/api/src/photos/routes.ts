@@ -3,8 +3,7 @@ import { config } from "../config.js";
 import { prisma } from "../prisma.js";
 import { logEvent } from "../logger.js";
 import { authorizationUrl, photosConfigured, exchangeCode, photosConnected, disconnectPhotos } from "./oauth.js";
-import { HttpPhotosClient } from "./http-client.js";
-import { syncGooglePhotos } from "./sync.js";
+import { createPickerSession, getPickerSession, importPickerSession } from "./picker.js";
 import { logPhotosError, publicReason } from "./errors.js";
 
 export function registerPhotosRoutes(v1: Router) {
@@ -19,13 +18,13 @@ export function registerPhotosRoutes(v1: Router) {
       lastSync: sync?.lastSync ?? null,
       itemsProcessed: sync?.itemsProcessed ?? 0,
       errors: sync?.errors ?? null,
-      note: "photoslibrary.readonly only. Media IDs cached; temporary base URLs are never stored.",
+      note: "Google no longer allows listing the whole library. Use Photos Picker, then import. IDs only; no baseUrl stored.",
     });
   });
 
   v1.get("/integrations/google-photos/connect", (_req, res) => {
     if (!photosConfigured()) {
-      console.error("[photos] connect blocked: google_photos_disabled (check ENABLED + CLIENT_ID + SECRET)");
+      console.error("[photos] connect blocked: google_photos_disabled");
       return res.status(400).json({ error: "google_photos_disabled" });
     }
     const authorization = authorizationUrl("trs");
@@ -38,11 +37,7 @@ export function registerPhotosRoutes(v1: Router) {
     const googleDesc = String(req.query.error_description || "");
     const code = String(req.query.code || "");
     const web = config.webOrigin.replace(/\/$/, "");
-    console.log("[photos] callback query", {
-      error: googleError || null,
-      error_description: googleDesc || null,
-      hasCode: Boolean(code),
-    });
+    console.log("[photos] callback query", { error: googleError || null, hasCode: Boolean(code) });
     if (googleError || !code) {
       const reason = publicReason(googleError || googleDesc || "missing_code");
       console.error("[photos] callback aborted:", reason);
@@ -50,7 +45,7 @@ export function registerPhotosRoutes(v1: Router) {
     }
     try {
       await exchangeCode(code);
-      console.log("[photos] token exchange ok");
+      console.log("[photos] token exchange ok (picker scope)");
       return res.redirect(`${web}/settings?photos=connected`);
     } catch (e) {
       const reason = publicReason(e instanceof Error ? e.message : "oauth_failed");
@@ -65,18 +60,43 @@ export function registerPhotosRoutes(v1: Router) {
     res.json({ status: "disconnected" });
   });
 
-  v1.post("/integrations/google-photos/sync", async (_req, res) => {
-    if (!photosConfigured()) {
-      console.error("[photos] sync blocked: google_photos_disabled");
-      return res.status(400).json({ error: "google_photos_disabled" });
-    }
-    if (!(await photosConnected())) {
-      console.error("[photos] sync blocked: photos_not_connected — click Connect first");
-      return res.status(400).json({ error: "photos_not_connected" });
-    }
+  v1.post("/integrations/google-photos/picker", async (_req, res) => {
+    if (!photosConfigured()) return res.status(400).json({ error: "google_photos_disabled" });
+    if (!(await photosConnected())) return res.status(400).json({ error: "photos_not_connected" });
     try {
-      const result = await syncGooglePhotos(new HttpPhotosClient());
-      console.log("[photos] sync result", result);
+      const session = await createPickerSession();
+      res.json({ status: "PICKER_REQUIRED", ...session });
+    } catch (e) {
+      logPhotosError("picker_create", e);
+      res.status(500).json({ error: e instanceof Error ? e.message : "picker_failed" });
+    }
+  });
+
+  v1.get("/integrations/google-photos/picker/:id", async (req, res) => {
+    try {
+      res.json(await getPickerSession(req.params.id));
+    } catch (e) {
+      logPhotosError("picker_get", e);
+      res.status(500).json({ error: e instanceof Error ? e.message : "picker_get_failed" });
+    }
+  });
+
+  v1.post("/integrations/google-photos/sync", async (req, res) => {
+    if (!photosConfigured()) return res.status(400).json({ error: "google_photos_disabled" });
+    if (!(await photosConnected())) return res.status(400).json({ error: "photos_not_connected" });
+    const sessionId = String(req.body?.sessionId || req.query.sessionId || "");
+    try {
+      if (!sessionId) {
+        const session = await createPickerSession();
+        console.log("[photos] full-library sync is blocked by Google; open pickerUri instead");
+        return res.json({
+          status: "PICKER_REQUIRED",
+          ...session,
+          error: "Google blocked mediaItems.list. Open pickerUri, pick photos, then POST /sync with sessionId.",
+        });
+      }
+      const result = await importPickerSession(sessionId);
+      console.log("[photos] import", result);
       res.json(result);
     } catch (e) {
       logPhotosError("sync", e);
