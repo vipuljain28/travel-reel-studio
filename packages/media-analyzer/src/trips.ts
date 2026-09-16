@@ -21,13 +21,25 @@ export function detectTrips(points: GeoPoint[], gapHours = 36): DetectedTrip[] {
     const hours = (p.dateTaken.getTime() - last.dateTaken.getTime()) / 36e5;
     const dist = haversineKm(last, p);
     const far = dist != null && dist > 120;
-    if (hours > gapHours || far) { groups.push(current); current = [i]; } else { current.push(i); }
+    if (hours > gapHours || far) { groups.push(current); current = [i]; } else current.push(i);
     last = p;
   }
   if (current.length) groups.push(current);
   return groups.map((mediaIndexes) => {
     const dates = mediaIndexes.map((i) => points[i].dateTaken);
     const names = mediaIndexes.map((i) => points[i].locationName).filter((n): n is string => Boolean(n));
-    return { title: names[0] ? `${names[0]} trip` : "Untitled trip", startDate: new Date(Math.min(...dates.map((d) => d.getTime()))), endDate: new Date(Math.max(...dates.map((d) => d.getTime()))), mediaIndexes };
+    return {
+      title: titleFromNames(names),
+      startDate: new Date(Math.min(...dates.map((d) => d.getTime()))),
+      endDate: new Date(Math.max(...dates.map((d) => d.getTime()))),
+      mediaIndexes,
+    };
   });
+}
+export function titleFromNames(names: string[]): string {
+  if (!names.length) return "Untitled trip";
+  const counts = new Map<string, number>();
+  for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
+  const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return `${best} trip`;
 }
