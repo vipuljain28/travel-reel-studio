@@ -27,6 +27,7 @@ model Media {
   compositionScore Float?
   sha256           String?
   pHash            String?
+  thumbnailPath    String?
   duplicateGroupId String?
   aiDescription    String?
   aiScore          Float?
