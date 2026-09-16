@@ -14,6 +14,7 @@ import { buildHealth } from "./health.js";
 import { detectAndPersistTrips } from "./trips-service.js";
 import { authorizationUrl, photosConfigured } from "./photos/oauth.js";
 import { resolvePlace } from "./places/service.js";
+import { renderJob } from "./renderer.js";
 
 const app = express();
 app.use(cors({ origin: config.webOrigin }));
@@ -139,6 +140,7 @@ v1.get("/projects/:id/render-plan", async (req, res) => {
     template: project.templateId as TemplateId,
     duration: project.duration,
     hook: project.hook || undefined,
+    caption: project.caption || undefined,
   });
   const errors = validateRenderPlan(plan);
   if (errors.length) return res.status(400).json({ errors });
@@ -149,8 +151,10 @@ v1.post("/render", async (req, res) => {
   const projectId = String(req.body.projectId || "");
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "not found" });
+  if (!project.renderPlan) return res.status(400).json({ error: "render_plan_missing" });
   const job = await prisma.renderJob.create({ data: { projectId, status: "QUEUED" } });
-  res.status(202).json({ job, message: "Job queued. FFmpeg encode lands in Phase 8." });
+  renderJob(job.id).catch(() => undefined);
+  res.status(202).json({ job });
 });
 v1.get("/render/:id", async (req, res) => {
   const job = await prisma.renderJob.findUnique({ where: { id: req.params.id } });
