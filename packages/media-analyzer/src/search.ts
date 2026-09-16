@@ -21,13 +21,10 @@ const MONTHS: Record<string, number> = {
   july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
   jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 };
+const SKIP_FOLDERS = /^(media|dcim|camera|img|images|photos|video|pictures|download|downloads|users|projects|travel-reel-studio)$/i;
 
 function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean);
 }
 
 export function parseSearchQuery(q: string): ParsedQuery {
@@ -55,35 +52,36 @@ export function parseSearchQuery(q: string): ParsedQuery {
   parsed.textTokens = tokenize(rest);
   return parsed;
 }
+
 export function inferPlaceFromPath(filePath?: string | null): string | null {
   if (!filePath) return null;
   const parts = filePath.split(/[/\\]/).filter(Boolean);
-  if (parts.length < 2) return null;
-  const folder = parts[parts.length - 2];
-  if (/^(media|dcim|camera|img|images|photos|video)$/i.test(folder)) return null;
-  return folder.replace(/[_-]+/g, " ");
+  const places = parts
+    .filter((p) => !SKIP_FOLDERS.test(p) && !/\.(jpe?g|png|webp|heic|mp4|mov|m4v)$/i.test(p))
+    .filter((p) => !/^[A-Z]:$/.test(p))
+    .map((p) => p.replace(/[_-]+/g, " "));
+  if (!places.length) return null;
+  return places.join(" ");
 }
+
 export function matchesSearch(item: SearchableMedia, rawQuery: string): boolean {
   const q = parseSearchQuery(rawQuery);
   if (q.qualityMin != null && (item.qualityScore ?? 0) < q.qualityMin) return false;
   if (q.mediaType && item.mediaType && item.mediaType !== q.mediaType) return false;
   if (q.trip && !(item.tripTitle || "").toLowerCase().includes(q.trip.toLowerCase())) return false;
-  const locHay = `${item.locationName ?? ""} ${inferPlaceFromPath(item.filePath) ?? ""}`.toLowerCase();
+  const inferred = inferPlaceFromPath(item.filePath);
+  const locHay = `${item.locationName ?? ""} ${inferred ?? ""}`.toLowerCase();
   if (q.location && !locHay.includes(q.location.toLowerCase())) return false;
   if (q.year && item.dateTaken && item.dateTaken.getUTCFullYear() !== q.year) return false;
   if (q.month && item.dateTaken && item.dateTaken.getUTCMonth() + 1 !== q.month) return false;
   if (!q.textTokens.length) return true;
-  const hay = [
-    item.filePath,
-    item.locationName,
-    item.tripTitle,
-    item.aiDescription,
-    inferPlaceFromPath(item.filePath),
-    item.dateTaken?.toISOString(),
-  ]
+  const hay = [item.filePath, item.locationName, item.tripTitle, item.aiDescription, inferred, item.dateTaken?.toISOString()]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
   const hayNorm = hay.replace(/[^a-z0-9]+/g, " ");
-  return q.textTokens.every((token) => hay.includes(token) || hayNorm.includes(token));
+  const allHit = q.textTokens.every((token) => hay.includes(token) || hayNorm.includes(token));
+  if (allHit) return true;
+  const placeTokens = q.textTokens.filter((t) => t.length >= 4);
+  return placeTokens.some((token) => locHay.includes(token) || hayNorm.includes(token));
 }

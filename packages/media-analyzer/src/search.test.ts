@@ -20,6 +20,11 @@ describe("search", () => {
   it("matches place query from folder + location", () => {
     assert.equal(matchesSearch(mulshi, "Green Gate Resort, Mulshi"), true);
   });
+  it("matches place query from folder only", () => {
+    const onlyFolder = { filePath: "G:\\projects\\travel-reel-studio\\media\\Mulshi\\IMG_001.jpg", locationName: null, mediaType: "image" };
+    assert.equal(matchesSearch(onlyFolder, "Green Gate Resort, Mulshi"), true);
+    assert.equal(matchesSearch(onlyFolder, "mulshi"), true);
+  });
   it("filters by quality", () => {
     assert.equal(matchesSearch(mulshi, "quality:>0.9"), false);
     assert.equal(matchesSearch(mulshi, "quality:>0.7"), true);

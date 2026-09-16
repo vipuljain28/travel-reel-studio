@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { analyzeFile, walkMediaFiles } from "@trs/media-analyzer";
+import { analyzeFile, walkMediaFiles, inferPlaceFromPath } from "@trs/media-analyzer";
 import { prisma } from "./prisma.js";
 import { config } from "./config.js";
 import { logEvent } from "./logger.js";
@@ -19,6 +19,7 @@ export async function scanMediaRoot(): Promise<{
   scanned: number;
   upserted: number;
   skipped: number;
+  backfilled: number;
   duplicates: number;
 }> {
   const root = path.resolve(config.mediaRoot);
@@ -26,19 +27,26 @@ export async function scanMediaRoot(): Promise<{
   const files = await walkMediaFiles(root);
   let upserted = 0;
   let skipped = 0;
+  let backfilled = 0;
   for (const filePath of files) {
     assertInsideRoot(root, path.relative(root, filePath));
     const stat = await fs.stat(filePath);
     const existing = await prisma.media.findUnique({
       where: { provider_filePath: { provider: "local", filePath } },
     });
+    const place = inferPlaceFromPath(filePath);
     const analyzed = await analyzeFile(filePath, stat.mtime, stat.size);
     if (!analyzed) {
       skipped += 1;
       continue;
     }
     if (existing?.sha256 === analyzed.sha256 && existing.fileSize === stat.size) {
-      skipped += 1;
+      if (!existing.locationName && place) {
+        await prisma.media.update({ where: { id: existing.id }, data: { locationName: place } });
+        backfilled += 1;
+      } else {
+        skipped += 1;
+      }
       continue;
     }
     const thumbnailPath = await writeThumbPointer(analyzed.sha256, filePath);
@@ -50,6 +58,7 @@ export async function scanMediaRoot(): Promise<{
       height: analyzed.height ?? null,
       duration: analyzed.duration ?? null,
       dateTaken: analyzed.dateTaken ?? stat.mtime,
+      locationName: place,
       sha256: analyzed.sha256,
       pHash: analyzed.pHash ?? null,
       thumbnailPath,
@@ -76,6 +85,6 @@ export async function scanMediaRoot(): Promise<{
     duplicates += g._count.sha256;
     await prisma.media.updateMany({ where: { sha256: g.sha256 }, data: { duplicateGroupId: g.sha256 } });
   }
-  logEvent("media_scan", { root, scanned: files.length, upserted, skipped, duplicates });
-  return { root, scanned: files.length, upserted, skipped, duplicates };
+  logEvent("media_scan", { root, scanned: files.length, upserted, skipped, backfilled, duplicates });
+  return { root, scanned: files.length, upserted, skipped, backfilled, duplicates };
 }
